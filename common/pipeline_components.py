@@ -142,11 +142,18 @@ def capture(capture_queue_in):
         )
     except Exception as e:
         logger.error(f"Error in packet capture: {e}")
-        # For testing, generate synthetic data
-        logger.warning("Generating synthetic packet data for testing")
-        while True:
-            capture_queue_in.put(time.time())
-            sleep(0.01)  # 100 packets per second
+        # Optional: synthetic capture only when explicitly enabled
+        allow_synth = os.environ.get('ALLOW_SYNTHETIC_CAPTURE', '0') == '1'
+        if allow_synth:
+            logger.warning("ALLOW_SYNTHETIC_CAPTURE=1 -> Generating synthetic packet data for testing")
+            while True:
+                capture_queue_in.put(time.time())
+                # Keep a modest rate to reduce CPU while still exercising pipeline
+                sleep(0.02)  # ~50 packets per second
+        else:
+            logger.warning("Synthetic capture disabled (set ALLOW_SYNTHETIC_CAPTURE=1 to enable). Capture thread idling.")
+            while True:
+                sleep(1)
 
 # --- Pre-Process Component ---
 def ddos_preprocess(capture_queue_out, detection_queue_in, input_storage_queue_in, lookback, window_size):
@@ -162,66 +169,65 @@ def ddos_preprocess(capture_queue_out, detection_queue_in, input_storage_queue_i
     """
     logger.info(f"Starting preprocessing with lookback={lookback}, window_size={window_size}")
     
-    previous_processed_time = time.time()
-    data = [0] * lookback
-    
-    # Initial fill of lookback windows
+    # Use a blocking, low-CPU approach per time window
+    # Fill initial window history
+    window_counts = [0] * lookback
     for i in range(lookback):
+        end_time = time.time() + window_size
         count = 0
-        start_time = time.time()
-        
-        # Count packets in this time window
-        while (time.time() - start_time) < window_size:
+        while True:
+            remaining = end_time - time.time()
+            if remaining <= 0:
+                break
             try:
-                capture_queue_out.get_nowait()
+                # Block until packet arrives or window ends
+                capture_queue_out.get(timeout=min(remaining, 0.1))
                 count += 1
-            except:
-                sleep(0.001)  # Small sleep to prevent busy waiting
-        
-        data[i] = count
-        previous_processed_time = time.time()
+            except Exception:
+                # Timeout: just loop to re-check remaining time
+                pass
+        window_counts[i] = count
         logger.debug(f"Initial window {i}: {count} packets")
-    
-    # Send initial data
-    detection_queue_in.put(data.copy())
+
+    # Emit initial features
+    detection_queue_in.put(window_counts.copy())
     input_storage_queue_in.put({
         'timestamp': time.time(),
-        'packet_counts': data.copy(),
+        'packet_counts': window_counts.copy(),
         'lookback': lookback,
         'window_size': window_size
     })
 
-    # Continuous processing with sliding window
+    # Continuous sliding windows
     while True:
         try:
-            # Shift the sliding window
-            data = data[1:]  # Remove oldest element
+            # Slide: drop oldest count
+            window_counts = window_counts[1:]
+            end_time = time.time() + window_size
             count = 0
-            start_time = time.time()
-            
-            # Count packets in current window
-            while (time.time() - start_time) < window_size:
+            while True:
+                remaining = end_time - time.time()
+                if remaining <= 0:
+                    break
                 try:
-                    capture_queue_out.get_nowait()
+                    capture_queue_out.get(timeout=min(remaining, 0.1))
                     count += 1
-                except:
-                    sleep(0.001)
-            
-            # Add new count to the end
-            data.append(count)
-            
-            # Send processed data
-            detection_queue_in.put(data.copy())
+                except Exception:
+                    # Timeout: check remaining time again
+                    pass
+
+            window_counts.append(count)
+
+            # Send downstream
+            detection_queue_in.put(window_counts.copy())
             input_storage_queue_in.put({
                 'timestamp': time.time(),
-                'packet_counts': data.copy(),
+                'packet_counts': window_counts.copy(),
                 'lookback': lookback,
                 'window_size': window_size
             })
-            
-            previous_processed_time = time.time()
-            logger.debug(f"Processed window: {count} packets, total feature: {data}")
-            
+            logger.debug(f"Processed window: {count} packets")
+
         except Exception as e:
             logger.error(f"Error in preprocessing: {e}")
             sleep(0.1)

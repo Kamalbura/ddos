@@ -68,6 +68,17 @@ def benchmark_model_configs():
             # Create model
             model = TSTPlus(**config)
             model.eval()
+            # Ensure deterministic, low-thread CPU usage during benchmarking
+            if hasattr(torch, 'set_num_threads'):
+                try:
+                    torch.set_num_threads(1)
+                except Exception:
+                    pass
+            if hasattr(torch, 'set_num_interop_threads'):
+                try:
+                    torch.set_num_interop_threads(1)
+                except Exception:
+                    pass
             
             # Count parameters
             total_params = sum(p.numel() for p in model.parameters())
@@ -87,13 +98,13 @@ def benchmark_model_configs():
             dummy_input = torch.randn(1, 1, 400)  # [batch, features, sequence]
             
             # Warmup
-            with torch.no_grad():
+            with torch.inference_mode():
                 for _ in range(10):
                     _ = model(dummy_input)
             
             # Actual benchmark
             times = []
-            with torch.no_grad():
+            with torch.inference_mode():
                 for _ in range(100):
                     start_time = time.time()
                     output = model(dummy_input)
