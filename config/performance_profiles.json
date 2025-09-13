@@ -1,0 +1,109 @@
+{
+  "profiles": {
+    "light": {
+      "name": "Light Production",
+      "description": "Lightweight for production use (~5% CPU)",
+      "cpu_target": "5-15%",
+      "model_config": {
+        "d_model": 32,
+        "n_heads": 4,
+        "n_layers": 1,
+        "d_ff": 128,
+        "dropout": 0.2
+      },
+      "processing": {
+        "augmentation_count": 1,
+        "ensemble_passes": 1,
+        "enable_statistics": false,
+        "enable_heavy_features": false
+      },
+      "performance": {
+        "expected_inference_ms": "10-20",
+        "memory_mb": "50-100",
+        "accuracy": "Good"
+      }
+    },
+    "medium": {
+      "name": "Balanced",
+      "description": "Balanced performance (~30% CPU)",
+      "cpu_target": "25-35%",
+      "model_config": {
+        "d_model": 64,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1
+      },
+      "processing": {
+        "augmentation_count": 2,
+        "ensemble_passes": 2,
+        "enable_statistics": true,
+        "enable_heavy_features": false
+      },
+      "performance": {
+        "expected_inference_ms": "50-100",
+        "memory_mb": "150-300",
+        "accuracy": "Better"
+      }
+    },
+    "heavy": {
+      "name": "Research Grade",
+      "description": "Heavy research configuration (~60% CPU)",
+      "cpu_target": "55-70%",
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 16,
+        "n_layers": 3,
+        "d_ff": 512,
+        "dropout": 0.1
+      },
+      "processing": {
+        "augmentation_count": 3,
+        "ensemble_passes": 3,
+        "enable_statistics": true,
+        "enable_heavy_features": true
+      },
+      "performance": {
+        "expected_inference_ms": "200-500",
+        "memory_mb": "400-800",
+        "accuracy": "High"
+      }
+    },
+    "ultra": {
+      "name": "Ultra Research",
+      "description": "Maximum research configuration (~90% CPU)",
+      "cpu_target": "80-95%",
+      "model_config": {
+        "d_model": 256,
+        "n_heads": 32,
+        "n_layers": 6,
+        "d_ff": 1024,
+        "dropout": 0.05
+      },
+      "processing": {
+        "augmentation_count": 5,
+        "ensemble_passes": 3,
+        "enable_statistics": true,
+        "enable_heavy_features": true
+      },
+      "performance": {
+        "expected_inference_ms": "1000-2000",
+        "memory_mb": "800-2048",
+        "accuracy": "Maximum"
+      }
+    }
+  },
+  "default_profile": "medium",
+  "common_config": {
+    "c_in": 1,
+    "c_out": 2,
+    "seq_len": 400,
+    "max_seq_len": 512,
+    "norm": "BatchNorm",
+    "attn_dropout": 0.1,
+    "res_attention": true,
+    "pre_norm": false,
+    "pe": "zeros",
+    "learn_pe": true
+  }
+}

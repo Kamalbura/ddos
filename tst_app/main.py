@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TST Application for DDoS Detection  
-Standalone application using Time Series Transformer model with LOOKBACK=400
+Standalone application using Time Series Transformer model with configurable performance profiles
 """
 
 import os
@@ -20,6 +20,9 @@ from typing import Tuple
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
+# Import configuration manager
+from common.performance_config import PerformanceConfig
+
 from common.pipeline_components import (
     check_venv, capture, ddos_preprocess, ddos_mitigation,
     create_storage_tables, store_input, store_output, update_config,
@@ -35,6 +38,13 @@ logger = logging.getLogger(__name__)
 # --- App Specific Settings ---
 LOOKBACK = 400
 WINDOW_SIZE = 0.60  
+
+# Global performance configuration manager
+PERFORMANCE_CONFIG = PerformanceConfig()
+
+# Print current configuration at startup
+print("🔧 TST Performance Configuration:")
+PERFORMANCE_CONFIG.print_profile_info()  
 PORT = 8001  # Use different port to avoid conflicts
 
 # Research vs Production Model Configuration
@@ -79,20 +89,19 @@ class TST_Detector:
     TST model wrapper with proper tensor handling for time series data
     """
     
-    def __init__(self, model_path: str, research_mode: bool = None):
+    def __init__(self, model_path: str, profile: str = None):
         self.model_path = model_path
         self.model = None
         self.feature_buffer = []
         
-        # Set research mode - parameter overrides global config
-        if research_mode is not None:
-            self.research_mode = research_mode
-        else:
-            self.research_mode = RESEARCH_MODE
+        # Set performance profile
+        if profile and PERFORMANCE_CONFIG.set_profile(profile):
+            logger.info(f"Using performance profile: {profile}")
         
-        self.config = RESEARCH_CONFIG if self.research_mode else PRODUCTION_CONFIG
+        self.config = PERFORMANCE_CONFIG.get_model_config()
+        self.processing_config = PERFORMANCE_CONFIG.get_processing_config()
         
-        logger.info(f"Initializing TST detector (Research Mode: {self.research_mode})")
+        logger.info(f"Initializing TST detector (Profile: {PERFORMANCE_CONFIG.current_profile})")
         
     def load_model(self) -> bool:
         """

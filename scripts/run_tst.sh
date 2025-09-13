@@ -102,12 +102,48 @@ else
 fi
 
 echo "🎯 Starting TST Application..."
-echo "   - Model: Time Series Transformer (Full Precision FP32)"
+echo "   - Model: Time Series Transformer (Configurable Performance)"
+
+# Show current performance configuration
+echo "📊 Checking performance configuration..."
+$PYTHON_CMD scripts/config_tst.py --current > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    CURRENT_PROFILE=$($PYTHON_CMD scripts/config_tst.py --current 2>/dev/null)
+    echo "   - Current profile: $CURRENT_PROFILE"
+    
+    # Show profile info
+    case $CURRENT_PROFILE in
+        "light")
+            echo "   - CPU Usage: ~5% (Production ready)"
+            ;;
+        "medium") 
+            echo "   - CPU Usage: ~30% (Balanced)"
+            ;;
+        "heavy")
+            echo "   - CPU Usage: ~60% (Research grade)"
+            ;;
+        "ultra")
+            echo "   - CPU Usage: ~90% (Maximum research)"
+            ;;
+        *)
+            echo "   - CPU Usage: Variable (Custom profile)"
+            ;;
+    esac
+else
+    echo "   - Using default configuration"
+fi
+
 echo "   - Sequence length: 400 time windows"
 echo "   - Config server: http://localhost:8001"
 echo ""
-echo "⚡ Note: Using FP32 model for maximum accuracy"
-echo "💡 Higher computational requirements but better detection precision"
+echo "⚙️  To change performance profile:"
+echo "   python scripts/config_tst.py --set <light|medium|heavy|ultra>"
+echo ""
+echo "� Available profiles:"
+echo "   - light  (5% CPU)  - Production ready"
+echo "   - medium (30% CPU) - Balanced performance"  
+echo "   - heavy  (60% CPU) - Research grade"
+echo "   - ultra  (90% CPU) - Maximum research quality"
 echo ""
 echo "Press Ctrl+C to stop the application"
 echo ""
