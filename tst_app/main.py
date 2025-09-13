@@ -37,17 +37,59 @@ LOOKBACK = 400
 WINDOW_SIZE = 0.60  
 PORT = 8001  # Use different port to avoid conflicts
 
+# Research vs Production Model Configuration
+RESEARCH_MODE = True  # Set to True for heavy research model, False for production
+
+# Research Model Configuration (Heavy - matches your original research)
+RESEARCH_CONFIG = {
+    'c_in': 1,
+    'c_out': 2,
+    'seq_len': LOOKBACK,
+    'd_model': 128,      # Heavy: 128 vs 64 (4x parameters)
+    'n_heads': 16,       # Heavy: 16 vs 8 (2x attention heads)
+    'n_layers': 3,       # Heavy: 3 vs 2 (50% more layers)
+    'd_ff': 512,         # Heavy: 512 vs 256 (2x feedforward)
+    'dropout': 0.1,
+    'max_seq_len': 512,
+    'norm': 'BatchNorm',
+    'attn_dropout': 0.1,
+    'res_attention': True,
+    'pre_norm': False,
+    'pe': 'zeros',
+    'learn_pe': True
+}
+
+# Production Model Configuration (Lightweight - current)
+PRODUCTION_CONFIG = {
+    'c_in': 1,
+    'c_out': 2,
+    'seq_len': LOOKBACK,
+    'd_model': 64,       # Light: 64 for efficiency
+    'n_heads': 8,        # Light: 8 for speed
+    'n_layers': 2,       # Light: 2 for reduced computation
+    'd_ff': 256,         # Light: 256 default
+    'dropout': 0.1
+}
+
 class TST_Detector:
     """
     TST model wrapper with proper tensor handling for time series data
     """
     
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, research_mode: bool = None):
         self.model_path = model_path
         self.model = None
         self.feature_buffer = []
         
-        logger.info("Initializing TST detector")
+        # Set research mode - parameter overrides global config
+        if research_mode is not None:
+            self.research_mode = research_mode
+        else:
+            self.research_mode = RESEARCH_MODE
+        
+        self.config = RESEARCH_CONFIG if self.research_mode else PRODUCTION_CONFIG
+        
+        logger.info(f"Initializing TST detector (Research Mode: {self.research_mode})")
         
     def load_model(self) -> bool:
         """
@@ -112,29 +154,21 @@ class TST_Detector:
                         self.model = checkpoint['model']
                         logger.info("Loaded model from 'model' key in checkpoint")
                     elif 'state_dict' in checkpoint:
-                        # Create model and load state dict
-                        self.model = tstplus.TSTPlus(
-                            c_in=1,  # Single feature (packet count)
-                            c_out=2,  # Binary classification (Normal/Attack)
-                            seq_len=LOOKBACK,
-                            d_model=64,  # Smaller for efficiency
-                            n_heads=8,
-                            n_layers=2,  # Reduced layers for speed
-                            dropout=0.1
-                        )
+                        # Create model and load state dict - use research config
+                        config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
+                        logger.info(f"Creating {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model")
+                        logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                        
+                        self.model = tstplus.TSTPlus(**config)
                         self.model.load_state_dict(checkpoint['state_dict'])
                         logger.info("Loaded model state dict")
                     else:
                         # Assume it's a state dict directly
-                        self.model = tstplus.TSTPlus(
-                            c_in=1,  # Single feature (packet count)
-                            c_out=2,  # Binary classification (Normal/Attack)
-                            seq_len=LOOKBACK,
-                            d_model=64,  # Smaller for efficiency
-                            n_heads=8,
-                            n_layers=2,  # Reduced layers for speed
-                            dropout=0.1
-                        )
+                        config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
+                        logger.info(f"Creating {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model")
+                        logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                        
+                        self.model = tstplus.TSTPlus(**config)
                         self.model.load_state_dict(checkpoint)
                         logger.info("Loaded model from direct state dict")
                 else:
@@ -143,26 +177,72 @@ class TST_Detector:
                     logger.info("Using checkpoint directly as model")
                 
                 self.model.eval()  # Set to evaluation mode
+                
+                # Calculate and log model complexity
+                self._log_model_complexity()
+                
                 logger.info(f"TST model loaded successfully from {self.model_path}")
                 return True
             else:
                 logger.error(f"TST model not found at {self.model_path}")
-                # Create a dummy model for testing
-                self.model = TSTPlus(
-                    c_in=1,
-                    c_out=2, 
-                    seq_len=LOOKBACK,
-                    d_model=64,
-                    n_heads=8,
-                    n_layers=2,
-                    dropout=0.1
-                )
+                # Create a dummy model for testing - use research config
+                config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
+                logger.info(f"Creating dummy {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model for testing")
+                logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                
+                self.model = tstplus.TSTPlus(**config)
                 logger.warning("Using randomly initialized TST model for testing")
                 return True
                 
         except Exception as e:
             logger.error(f"Error loading TST model: {e}")
             return False
+    
+    def _log_model_complexity(self):
+        """Log detailed model complexity information"""
+        if self.model is None:
+            return
+            
+        try:
+            # Count parameters
+            total_params = sum(p.numel() for p in self.model.parameters())
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            
+            # Estimate memory usage (rough calculation)
+            param_memory_mb = total_params * 4 / (1024 * 1024)  # 4 bytes per float32
+            
+            # Get model configuration
+            config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
+            
+            logger.info("=" * 60)
+            logger.info(f"🧠 TST MODEL COMPLEXITY ANALYSIS")
+            logger.info("=" * 60)
+            logger.info(f"Mode: {'🔬 RESEARCH (Heavy)' if RESEARCH_MODE else '⚡ PRODUCTION (Light)'}")
+            logger.info(f"Architecture:")
+            logger.info(f"  - d_model: {config.get('d_model', 'N/A')} (embedding dimension)")
+            logger.info(f"  - n_heads: {config.get('n_heads', 'N/A')} (attention heads)")
+            logger.info(f"  - n_layers: {config.get('n_layers', 'N/A')} (transformer layers)")
+            logger.info(f"  - d_ff: {config.get('d_ff', 'N/A')} (feedforward dimension)")
+            logger.info(f"  - seq_len: {config.get('seq_len', 'N/A')} (sequence length)")
+            logger.info(f"Parameters:")
+            logger.info(f"  - Total: {total_params:,} parameters")
+            logger.info(f"  - Trainable: {trainable_params:,} parameters")
+            logger.info(f"  - Memory: ~{param_memory_mb:.1f} MB")
+            logger.info(f"Expected Performance:")
+            if RESEARCH_MODE:
+                logger.info(f"  - CPU Usage: 🔥 HIGH (50-80%)")
+                logger.info(f"  - Inference: 🐌 SLOW (50-200ms)")
+                logger.info(f"  - Accuracy: 🎯 MAXIMUM")
+                logger.info(f"  - Memory: 🔥 HIGH (300-800MB)")
+            else:
+                logger.info(f"  - CPU Usage: ⚡ LOW (20-40%)")
+                logger.info(f"  - Inference: 🚀 FAST (10-50ms)")
+                logger.info(f"  - Accuracy: ✅ GOOD")
+                logger.info(f"  - Memory: ⚡ LOW (100-300MB)")
+            logger.info("=" * 60)
+            
+        except Exception as e:
+            logger.error(f"Error analyzing model complexity: {e}")
     
     def prepare_sequence_data(self, data_points: list) -> torch.Tensor:
         """
@@ -243,6 +323,32 @@ class TST_Detector:
             logger.error(f"Error in TST prediction: {e}")
             return False, 0.5
 
+    def detect_ddos(self, features: np.ndarray) -> Tuple[bool, float]:
+        """
+        Wrapper for detect_ddos compatibility
+        
+        Args:
+            features: Input features as numpy array [batch, sequence] or [sequence]
+            
+        Returns:
+            Tuple[bool, float]: (is_attack, confidence)
+        """
+        try:
+            # Ensure proper shape
+            if len(features.shape) == 1:
+                features = features.reshape(1, -1)  # [sequence] -> [1, sequence]
+            
+            # Convert to tensor with shape [batch, features, sequence]
+            # TST expects [batch, features, sequence] but our features are [batch, sequence]
+            # So we need to add the feature dimension
+            tensor = torch.FloatTensor(features).unsqueeze(1)  # [batch, 1, sequence]
+            
+            return self.predict(tensor)
+            
+        except Exception as e:
+            logger.error(f"Error in detect_ddos: {e}")
+            return False, 0.5
+
 def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_queue_in):
     """
     TST-specific detection function
@@ -258,7 +364,7 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
     
     # Initialize TST detector
     model_path = os.path.join(project_root, 'models', 'tst_model_fp32.pth')
-    detector = TST_Detector(model_path)
+    detector = TST_Detector(model_path, research_mode=RESEARCH_MODE)
     
     # Load model
     if not detector.load_model():
@@ -295,7 +401,23 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
                 if current_time - prev_time > 30:
                     if inference_times:
                         avg_inference = np.mean(inference_times)
-                        logger.info(f"TST Performance - Avg inference: {avg_inference:.2f}ms, Predictions: {len(inference_times)}")
+                        max_inference = np.max(inference_times)
+                        min_inference = np.min(inference_times)
+                        
+                        mode_str = "🔬 RESEARCH" if RESEARCH_MODE else "⚡ PRODUCTION"
+                        logger.info("=" * 50)
+                        logger.info(f"{mode_str} TST Performance Report")
+                        logger.info("=" * 50)
+                        logger.info(f"Predictions: {len(inference_times)}")
+                        logger.info(f"Avg inference: {avg_inference:.2f}ms")
+                        logger.info(f"Min inference: {min_inference:.2f}ms")
+                        logger.info(f"Max inference: {max_inference:.2f}ms")
+                        
+                        if RESEARCH_MODE:
+                            logger.info("🔬 Heavy model - High accuracy, slower inference")
+                        else:
+                            logger.info("⚡ Light model - Fast inference, good accuracy")
+                        logger.info("=" * 50)
                         inference_times = []
                     prev_time = current_time
                 
