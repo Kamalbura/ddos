@@ -207,6 +207,61 @@ class TST_Detector:
             logger.error(f"Error loading TST model: {e}")
             return False
     
+    def _sanitize_features(self, arr: np.ndarray) -> np.ndarray:
+        """Ensure features are finite and within reasonable bounds."""
+        try:
+            x = np.asarray(arr, dtype=np.float32)
+            x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+            # Clip extreme values to keep stats stable
+            x = np.clip(x, -1e6, 1e6)
+            return x
+        except Exception:
+            return np.zeros_like(arr, dtype=np.float32)
+
+    def _safe_entropy(self, x: np.ndarray) -> float:
+        """Shannon entropy on non-negative normalized magnitudes; safe for any input."""
+        try:
+            p = np.abs(np.asarray(x, dtype=np.float64))
+            s = p.sum()
+            if not np.isfinite(s) or s <= 0:
+                return 0.0
+            p = p / s
+            # Add epsilon to avoid log(0)
+            return float(-np.sum(p * np.log(p + 1e-12)))
+        except Exception:
+            return 0.0
+
+    def _safe_dominant_eigenvalue(self, x: np.ndarray) -> float:
+        """Compute a small correlation matrix on adjacent samples and return dominant eigenvalue safely."""
+        try:
+            v = self._sanitize_features(x).flatten()
+            if v.size < 3 or np.allclose(v, v[0]):
+                return 1.0
+            # 2xN matrix of adjacent pairs to avoid degenerate self-correlation
+            a = v[:-1]
+            b = v[1:]
+            c = np.corrcoef(np.vstack([a, b]))  # 2x2
+            if not np.all(np.isfinite(c)):
+                return 1.0
+            vals = np.linalg.eigvals(c)
+            vals = np.real(vals)
+            vals = vals[np.isfinite(vals)]
+            return float(np.max(vals)) if vals.size else 1.0
+        except Exception:
+            return 1.0
+
+    def _safe_fft_energy(self, x: np.ndarray) -> float:
+        """Spectral energy with input sanitization."""
+        try:
+            v = self._sanitize_features(x).flatten()
+            fft_result = np.fft.fft(v)
+            energy = np.sum(np.abs(fft_result) ** 2)
+            if not np.isfinite(energy):
+                return 0.0
+            return float(energy)
+        except Exception:
+            return 0.0
+
     def _log_model_complexity(self):
         """Log detailed model complexity information"""
         if self.model is None:
@@ -345,6 +400,8 @@ class TST_Detector:
             # Ensure proper shape
             if len(features.shape) == 1:
                 features = features.reshape(1, -1)  # [sequence] -> [1, sequence]
+            # Sanitize features early to avoid NaN/Inf propagation
+            features = self._sanitize_features(features)
             
             # Use processing configuration based on current profile
             processing = self.processing_config
@@ -377,6 +434,7 @@ class TST_Detector:
                 confidences = []
                 
                 for aug_features in augmented_features:
+                    aug_features = self._sanitize_features(aug_features)
                     tensor = torch.FloatTensor(aug_features).unsqueeze(1)  # [batch, 1, sequence]
                     
                     # Ultra-heavy: Multiple passes with different processing
@@ -403,11 +461,12 @@ class TST_Detector:
                 # Ultra-intensive statistical analysis
                 if enable_statistics:
                     # Basic statistics
+                    safe = self._sanitize_features(features)
                     feature_stats = {
-                        'mean': np.mean(features),
-                        'std': np.std(features),
-                        'skew': self._calculate_skewness(features),
-                        'kurtosis': self._calculate_kurtosis(features)
+                        'mean': float(np.mean(safe)),
+                        'std': float(np.std(safe)),
+                        'skew': self._calculate_skewness(safe),
+                        'kurtosis': self._calculate_kurtosis(safe)
                     }
                     
                     # Ultra profile: Add MASSIVE CPU-intensive statistical operations
@@ -415,24 +474,22 @@ class TST_Detector:
                         # Heavy statistical computations that consume CPU
                         for _ in range(50):  # 50 iterations of heavy stats
                             # Compute complex statistics
-                            feature_stats['var'] = np.var(features)
-                            feature_stats['percentiles'] = np.percentile(features, [10, 25, 50, 75, 90])
-                            feature_stats['entropy'] = -np.sum((features + 1e-10) * np.log(features + 1e-10))
+                            feature_stats['var'] = float(np.var(safe))
+                            feature_stats['percentiles'] = np.percentile(safe, [10, 25, 50, 75, 90])
+                            feature_stats['entropy'] = self._safe_entropy(safe)
                             
                             # Heavy correlation matrix computation
-                            if features.size > 1:
-                                correlation_matrix = np.corrcoef(features.reshape(-1, 1), features.reshape(-1, 1))
-                                eigenvalues = np.linalg.eigvals(correlation_matrix)
-                                feature_stats['dominant_eigenvalue'] = np.max(eigenvalues)
+                            if safe.size > 2:
+                                feature_stats['dominant_eigenvalue'] = self._safe_dominant_eigenvalue(safe)
                                 
                             # Heavy Fourier analysis
-                            fft_result = np.fft.fft(features.flatten())
-                            feature_stats['spectral_energy'] = np.sum(np.abs(fft_result)**2)
+                            feature_stats['spectral_energy'] = self._safe_fft_energy(safe)
                             
                             # Heavy convolution operations
                             kernel = np.random.random(10)
-                            convolved = np.convolve(features.flatten(), kernel, mode='valid')
-                            feature_stats['conv_energy'] = np.sum(convolved**2)
+                            convolved = np.convolve(safe.flatten(), kernel, mode='valid')
+                            ce = np.sum(convolved**2)
+                            feature_stats['conv_energy'] = float(ce if np.isfinite(ce) else 0.0)
                     
                     logger.debug(f"Ultra-heavy processing: {total_votes} predictions, intensive stats computed")
                 
@@ -515,16 +572,20 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
                 # Ultra: Advanced feature engineering and caching
                 if len(feature_history) > 10:
                     # Compute rolling statistics for better detection
-                    recent_features = np.array(feature_history[-10:])
-                    statistical_cache['rolling_mean'] = np.mean(recent_features)
-                    statistical_cache['rolling_std'] = np.std(recent_features)
-                    statistical_cache['trend'] = np.polyfit(range(len(recent_features)), recent_features, 1)[0]
+                    recent_features = np.array(feature_history[-10:], dtype=np.float64)
+                    statistical_cache['rolling_mean'] = float(np.mean(recent_features))
+                    statistical_cache['rolling_std'] = float(np.std(recent_features))
+                    try:
+                        statistical_cache['trend'] = float(np.polyfit(range(len(recent_features)), recent_features, 1)[0])
+                    except Exception:
+                        statistical_cache['trend'] = 0.0
                     
                     # Frequency domain analysis for pattern detection
                     if len(recent_features) >= 8:
                         fft_features = np.fft.fft(recent_features)
-                        statistical_cache['dominant_freq'] = np.argmax(np.abs(fft_features[1:len(recent_features)//2])) + 1
-                        statistical_cache['spectral_energy'] = np.sum(np.abs(fft_features)**2)
+                        statistical_cache['dominant_freq'] = int(np.argmax(np.abs(fft_features[1:len(recent_features)//2])) + 1)
+                        se = np.sum(np.abs(fft_features)**2)
+                        statistical_cache['spectral_energy'] = float(se if np.isfinite(se) else 0.0)
                         
             elif current_profile == 'heavy':
                 # Heavy: Basic feature caching
