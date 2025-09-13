@@ -31,13 +31,21 @@ def test_model_loading():
     
     try:
         # Import classes
-        from tstplus import TSTPlus, _TSTBackbone, _TSTEncoderLayer
+        import tstplus
         print("✅ TST classes imported successfully")
         
-        # Add to namespace for pickle
-        sys.modules[__name__]._TSTBackbone = _TSTBackbone
-        sys.modules[__name__]._TSTEncoderLayer = _TSTEncoderLayer
-        sys.modules[__name__].TSTPlus = TSTPlus
+        # Add all TST-related classes to namespace for pickle
+        import torch.nn as nn
+        for attr_name in dir(tstplus):
+            attr = getattr(tstplus, attr_name)
+            if isinstance(attr, type) and hasattr(attr, '__module__'):
+                sys.modules[__name__].__dict__[attr_name] = attr
+        
+        # Specifically add the main classes
+        sys.modules[__name__]._TSTBackbone = tstplus._TSTBackbone
+        sys.modules[__name__]._TSTEncoder = tstplus._TSTEncoder
+        sys.modules[__name__]._TSTEncoderLayer = tstplus._TSTEncoderLayer
+        sys.modules[__name__].TSTPlus = tstplus.TSTPlus
         
         # Try loading
         print("🔄 Loading model...")

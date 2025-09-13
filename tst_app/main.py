@@ -66,12 +66,18 @@ class TST_Detector:
                 
                 # Import the module to register all classes
                 import tstplus
-                from tstplus import TSTPlus, _TSTBackbone, _TSTEncoderLayer
                 
-                # Add classes to the current module's namespace for pickle loading
-                sys.modules[__name__]._TSTBackbone = _TSTBackbone
-                sys.modules[__name__]._TSTEncoderLayer = _TSTEncoderLayer
-                sys.modules[__name__].TSTPlus = TSTPlus
+                # Add all TST-related classes to the current module's namespace for pickle loading
+                for attr_name in dir(tstplus):
+                    attr = getattr(tstplus, attr_name)
+                    if isinstance(attr, type) and issubclass(attr, nn.Module):
+                        sys.modules[__name__].__dict__[attr_name] = attr
+                
+                # Also add specific classes that might be referenced
+                sys.modules[__name__]._TSTBackbone = tstplus._TSTBackbone
+                sys.modules[__name__]._TSTEncoder = tstplus._TSTEncoder
+                sys.modules[__name__]._TSTEncoderLayer = tstplus._TSTEncoderLayer
+                sys.modules[__name__].TSTPlus = tstplus.TSTPlus
                 
                 logger.info("Loading TST model with proper class references...")
                 
