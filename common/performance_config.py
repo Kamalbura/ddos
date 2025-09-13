@@ -18,9 +18,11 @@ class PerformanceConfig:
             self.config_dir = config_dir
             
         self.config_file = os.path.join(self.config_dir, 'performance_profiles.json')
+        self.current_profile_file = os.path.join(self.config_dir, 'current_profile.txt')
         self.profiles = {}
         self.current_profile = None
         self.load_profiles()
+        self.load_current_profile()
     
     def load_profiles(self):
         """Load performance profiles from JSON configuration"""
@@ -62,10 +64,38 @@ class PerformanceConfig:
             for profile_id, profile_data in self.profiles.items()
         }
     
+    def load_current_profile(self):
+        """Load the current profile from persistent storage"""
+        try:
+            if os.path.exists(self.current_profile_file):
+                with open(self.current_profile_file, 'r') as f:
+                    profile = f.read().strip()
+                    if profile in self.profiles:
+                        self.current_profile = profile
+                        return
+        except Exception as e:
+            print(f"Warning: Could not load current profile: {e}")
+        
+        # Fallback to default
+        if 'medium' in self.profiles:
+            self.current_profile = 'medium'
+        elif self.profiles:
+            self.current_profile = list(self.profiles.keys())[0]
+    
+    def save_current_profile(self):
+        """Save the current profile to persistent storage"""
+        try:
+            os.makedirs(self.config_dir, exist_ok=True)
+            with open(self.current_profile_file, 'w') as f:
+                f.write(self.current_profile or 'medium')
+        except Exception as e:
+            print(f"Warning: Could not save current profile: {e}")
+    
     def set_profile(self, profile_id: str) -> bool:
         """Set the active performance profile"""
         if profile_id in self.profiles:
             self.current_profile = profile_id
+            self.save_current_profile()
             return True
         return False
     

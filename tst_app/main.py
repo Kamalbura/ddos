@@ -166,21 +166,19 @@ class TST_Detector:
                         self.model = checkpoint['model']
                         logger.info("Loaded model from 'model' key in checkpoint")
                     elif 'state_dict' in checkpoint:
-                        # Create model and load state dict - use research config
-                        config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
-                        logger.info(f"Creating {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model")
-                        logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                        # Create model and load state dict - use current profile config
+                        logger.info(f"Creating TST model with profile: {PERFORMANCE_CONFIG.current_profile}")
+                        logger.info(f"Model config: d_model={self.config['d_model']}, n_heads={self.config['n_heads']}, n_layers={self.config['n_layers']}")
                         
-                        self.model = tstplus.TSTPlus(**config)
+                        self.model = tstplus.TSTPlus(**self.config)
                         self.model.load_state_dict(checkpoint['state_dict'])
                         logger.info("Loaded model state dict")
                     else:
                         # Assume it's a state dict directly
-                        config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
-                        logger.info(f"Creating {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model")
-                        logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                        logger.info(f"Creating TST model with profile: {PERFORMANCE_CONFIG.current_profile}")
+                        logger.info(f"Model config: d_model={self.config['d_model']}, n_heads={self.config['n_heads']}, n_layers={self.config['n_layers']}")
                         
-                        self.model = tstplus.TSTPlus(**config)
+                        self.model = tstplus.TSTPlus(**self.config)
                         self.model.load_state_dict(checkpoint)
                         logger.info("Loaded model from direct state dict")
                 else:
@@ -197,12 +195,11 @@ class TST_Detector:
                 return True
             else:
                 logger.error(f"TST model not found at {self.model_path}")
-                # Create a dummy model for testing - use research config
-                config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
-                logger.info(f"Creating dummy {'RESEARCH (Heavy)' if RESEARCH_MODE else 'PRODUCTION (Light)'} TST model for testing")
-                logger.info(f"Model config: d_model={config['d_model']}, n_heads={config['n_heads']}, n_layers={config['n_layers']}")
+                # Create a dummy model for testing - use current profile config
+                logger.info(f"Creating dummy TST model for testing with profile: {PERFORMANCE_CONFIG.current_profile}")
+                logger.info(f"Model config: d_model={self.config['d_model']}, n_heads={self.config['n_heads']}, n_layers={self.config['n_layers']}")
                 
-                self.model = tstplus.TSTPlus(**config)
+                self.model = tstplus.TSTPlus(**self.config)
                 logger.warning("Using randomly initialized TST model for testing")
                 return True
                 
@@ -223,35 +220,33 @@ class TST_Detector:
             # Estimate memory usage (rough calculation)
             param_memory_mb = total_params * 4 / (1024 * 1024)  # 4 bytes per float32
             
-            # Get model configuration
-            config = RESEARCH_CONFIG if RESEARCH_MODE else PRODUCTION_CONFIG
+            # Get current profile info
+            profile_info = PERFORMANCE_CONFIG.get_current_profile_info()
+            profile_name = profile_info.get('name', PERFORMANCE_CONFIG.current_profile)
             
             logger.info("=" * 60)
             logger.info(f"🧠 TST MODEL COMPLEXITY ANALYSIS")
             logger.info("=" * 60)
-            logger.info(f"Mode: {'🔬 RESEARCH (Heavy)' if RESEARCH_MODE else '⚡ PRODUCTION (Light)'}")
+            logger.info(f"Mode: {profile_name} ({PERFORMANCE_CONFIG.current_profile})")
             logger.info(f"Architecture:")
-            logger.info(f"  - d_model: {config.get('d_model', 'N/A')} (embedding dimension)")
-            logger.info(f"  - n_heads: {config.get('n_heads', 'N/A')} (attention heads)")
-            logger.info(f"  - n_layers: {config.get('n_layers', 'N/A')} (transformer layers)")
-            logger.info(f"  - d_ff: {config.get('d_ff', 'N/A')} (feedforward dimension)")
-            logger.info(f"  - seq_len: {config.get('seq_len', 'N/A')} (sequence length)")
+            logger.info(f"  - d_model: {self.config.get('d_model', 'N/A')} (embedding dimension)")
+            logger.info(f"  - n_heads: {self.config.get('n_heads', 'N/A')} (attention heads)")
+            logger.info(f"  - n_layers: {self.config.get('n_layers', 'N/A')} (transformer layers)")
+            logger.info(f"  - d_ff: {self.config.get('d_ff', 'N/A')} (feedforward dimension)")
+            logger.info(f"  - seq_len: {self.config.get('seq_len', 'N/A')} (sequence length)")
             logger.info(f"Parameters:")
             logger.info(f"  - Total: {total_params:,} parameters")
             logger.info(f"  - Trainable: {trainable_params:,} parameters")
             logger.info(f"  - Memory: ~{param_memory_mb:.1f} MB")
             logger.info(f"Expected Performance:")
-            if RESEARCH_MODE:
-                logger.info(f"  - CPU Usage: 🔥 ULTRA HIGH (60-90%) - RESEARCH GRADE")
-                logger.info(f"  - Inference: 🐌 VERY SLOW (100-500ms)")
-                logger.info(f"  - Accuracy: 🎯 MAXIMUM RESEARCH QUALITY")
-                logger.info(f"  - Memory: 🔥 ULTRA HIGH (800MB-2GB)")
-                logger.info(f"  - Model Size: 16x HEAVIER than production")
-            else:
-                logger.info(f"  - CPU Usage: ⚡ LOW (20-40%)")
-                logger.info(f"  - Inference: 🚀 FAST (10-50ms)")
-                logger.info(f"  - Accuracy: ✅ GOOD")
-                logger.info(f"  - Memory: ⚡ LOW (100-300MB)")
+            # Get performance info from profile
+            performance = profile_info.get('performance', {})
+            cpu_target = profile_info.get('cpu_target', 'Unknown')
+            
+            logger.info(f"  - CPU Usage: {cpu_target}")
+            logger.info(f"  - Inference: {performance.get('expected_inference_ms', 'Unknown')} ms")
+            logger.info(f"  - Memory: {performance.get('memory_mb', 'Unknown')} MB") 
+            logger.info(f"  - Accuracy: {performance.get('accuracy', 'Unknown')}")
             logger.info("=" * 60)
             
         except Exception as e:
@@ -351,16 +346,22 @@ class TST_Detector:
             if len(features.shape) == 1:
                 features = features.reshape(1, -1)  # [sequence] -> [1, sequence]
             
-            # RESEARCH MODE: Heavy computational features for 60%+ CPU usage
-            if self.research_mode:
-                # 1. Data augmentation (CPU intensive)
+            # Use processing configuration based on current profile
+            processing = self.processing_config
+            enable_heavy = processing.get('enable_heavy_features', False)
+            augmentation_count = processing.get('augmentation_count', 1)
+            ensemble_passes = processing.get('ensemble_passes', 1)
+            enable_statistics = processing.get('enable_statistics', False)
+            
+            if enable_heavy and augmentation_count > 1:
+                # Heavy processing mode - data augmentation and ensemble
                 augmented_features = []
-                for _ in range(5):  # 5x data augmentation
+                for _ in range(augmentation_count):  # Configurable data augmentation
                     noise = np.random.normal(0, 0.01, features.shape)
                     augmented = features + noise
                     augmented_features.append(augmented)
                 
-                # 2. Multiple inference passes (ensemble-like)
+                # Multiple inference passes (ensemble-like)
                 predictions = []
                 confidences = []
                 
@@ -368,29 +369,30 @@ class TST_Detector:
                     tensor = torch.FloatTensor(aug_features).unsqueeze(1)  # [batch, 1, sequence]
                     
                     # Multiple forward passes for heavy computation
-                    for _ in range(3):  # 3 passes per augmented sample
+                    for _ in range(ensemble_passes):  # Configurable ensemble passes
                         pred, conf = self.predict(tensor)
                         predictions.append(pred)
                         confidences.append(conf)
                 
-                # 3. Heavy ensemble voting
+                # Heavy ensemble voting
                 attack_votes = sum(predictions)
                 total_votes = len(predictions)
                 avg_confidence = np.mean(confidences)
                 
-                # 4. Additional statistical analysis (CPU intensive)
-                feature_stats = {
-                    'mean': np.mean(features),
-                    'std': np.std(features),
-                    'skew': self._calculate_skewness(features),
-                    'kurtosis': self._calculate_kurtosis(features)
-                }
+                # Additional statistical analysis (if enabled)
+                if enable_statistics:
+                    feature_stats = {
+                        'mean': np.mean(features),
+                        'std': np.std(features),
+                        'skew': self._calculate_skewness(features),
+                        'kurtosis': self._calculate_kurtosis(features)
+                    }
+                    logger.debug(f"Heavy processing: {total_votes} predictions, stats: {feature_stats}")
                 
                 # Final decision based on ensemble
                 is_attack = attack_votes > (total_votes * 0.5)
                 final_confidence = avg_confidence
                 
-                logger.debug(f"RESEARCH: {total_votes} predictions, {attack_votes} attack votes, stats: {feature_stats}")
                 return is_attack, final_confidence
                 
             else:
@@ -437,7 +439,7 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
     
     # Initialize TST detector
     model_path = os.path.join(project_root, 'models', 'tst_model_fp32.pth')
-    detector = TST_Detector(model_path, research_mode=RESEARCH_MODE)
+    detector = TST_Detector(model_path)
     
     # Load model
     if not detector.load_model():
@@ -566,10 +568,17 @@ def run_tst_pipeline():
         Thread(target=update_config, args=(PORT,), daemon=True)
     ]
     
+    # Thread names for logging
+    thread_names = [
+        "capture", "ddos_preprocess", "ddos_detection_tst", 
+        "ddos_mitigation", "store_input", "store_output", "update_config"
+    ]
+    
     # Start all threads
     for i, thread in enumerate(threads):
         thread.start()
-        logger.info(f"Started thread {i+1}/7: {thread._target.__name__}")
+        thread_name = thread_names[i] if i < len(thread_names) else f"thread_{i+1}"
+        logger.info(f"Started thread {i+1}/7: {thread_name}")
         
     logger.info("All TST pipeline threads started successfully")
     logger.info(f"Configuration server available at: http://localhost:{PORT}/status")
@@ -583,7 +592,8 @@ def run_tst_pipeline():
             # Check if any thread has died
             for i, thread in enumerate(threads):
                 if not thread.is_alive():
-                    logger.error(f"Thread {i+1} ({thread._target.__name__}) has died!")
+                    thread_name = thread_names[i] if i < len(thread_names) else f"thread_{i+1}"
+                    logger.error(f"Thread {i+1} ({thread_name}) has died!")
             
     except KeyboardInterrupt:
         logger.info("Shutdown signal received...")
