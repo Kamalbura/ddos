@@ -354,22 +354,43 @@ class TST_Detector:
             enable_statistics = processing.get('enable_statistics', False)
             
             if enable_heavy and augmentation_count > 1:
-                # Heavy processing mode - data augmentation and ensemble
+                # ULTRA HEAVY processing mode - maximum CPU consumption
                 augmented_features = []
-                for _ in range(augmentation_count):  # Configurable data augmentation
+                
+                # 1. Intensive data augmentation with complex transformations
+                for i in range(augmentation_count):  # 5x data augmentation
+                    # Multiple types of noise and transformations
                     noise = np.random.normal(0, 0.01, features.shape)
                     augmented = features + noise
+                    
+                    # Additional heavy transformations for ultra profile
+                    if PERFORMANCE_CONFIG.current_profile == 'ultra':
+                        # Apply heavy mathematical operations
+                        augmented = np.convolve(augmented.flatten(), np.ones(5)/5, mode='same').reshape(augmented.shape)
+                        augmented = np.fft.fft(augmented.flatten()).real.reshape(augmented.shape)
+                        augmented = np.tanh(augmented * 2)  # Non-linear transformation
+                    
                     augmented_features.append(augmented)
                 
-                # Multiple inference passes (ensemble-like)
+                # 2. Massive ensemble with heavy computation
                 predictions = []
                 confidences = []
                 
                 for aug_features in augmented_features:
                     tensor = torch.FloatTensor(aug_features).unsqueeze(1)  # [batch, 1, sequence]
                     
-                    # Multiple forward passes for heavy computation
-                    for _ in range(ensemble_passes):  # Configurable ensemble passes
+                    # Ultra-heavy: Multiple passes with different processing
+                    for pass_num in range(ensemble_passes):  # 3 passes per augmented sample
+                        # Add CPU-intensive preprocessing for each pass
+                        if PERFORMANCE_CONFIG.current_profile == 'ultra':
+                            # Heavy matrix operations
+                            processed_tensor = tensor.clone()
+                            for _ in range(10):  # 10 matrix operations per pass
+                                processed_tensor = torch.mm(processed_tensor.view(-1, 1), processed_tensor.view(1, -1)).view(tensor.shape)
+                                processed_tensor = torch.sigmoid(processed_tensor)
+                                processed_tensor = processed_tensor / processed_tensor.norm()
+                            tensor = processed_tensor
+                        
                         pred, conf = self.predict(tensor)
                         predictions.append(pred)
                         confidences.append(conf)
@@ -379,15 +400,41 @@ class TST_Detector:
                 total_votes = len(predictions)
                 avg_confidence = np.mean(confidences)
                 
-                # Additional statistical analysis (if enabled)
+                # Ultra-intensive statistical analysis
                 if enable_statistics:
+                    # Basic statistics
                     feature_stats = {
                         'mean': np.mean(features),
                         'std': np.std(features),
                         'skew': self._calculate_skewness(features),
                         'kurtosis': self._calculate_kurtosis(features)
                     }
-                    logger.debug(f"Heavy processing: {total_votes} predictions, stats: {feature_stats}")
+                    
+                    # Ultra profile: Add MASSIVE CPU-intensive statistical operations
+                    if PERFORMANCE_CONFIG.current_profile == 'ultra':
+                        # Heavy statistical computations that consume CPU
+                        for _ in range(50):  # 50 iterations of heavy stats
+                            # Compute complex statistics
+                            feature_stats['var'] = np.var(features)
+                            feature_stats['percentiles'] = np.percentile(features, [10, 25, 50, 75, 90])
+                            feature_stats['entropy'] = -np.sum((features + 1e-10) * np.log(features + 1e-10))
+                            
+                            # Heavy correlation matrix computation
+                            if features.size > 1:
+                                correlation_matrix = np.corrcoef(features.reshape(-1, 1), features.reshape(-1, 1))
+                                eigenvalues = np.linalg.eigvals(correlation_matrix)
+                                feature_stats['dominant_eigenvalue'] = np.max(eigenvalues)
+                                
+                            # Heavy Fourier analysis
+                            fft_result = np.fft.fft(features.flatten())
+                            feature_stats['spectral_energy'] = np.sum(np.abs(fft_result)**2)
+                            
+                            # Heavy convolution operations
+                            kernel = np.random.random(10)
+                            convolved = np.convolve(features.flatten(), kernel, mode='valid')
+                            feature_stats['conv_energy'] = np.sum(convolved**2)
+                    
+                    logger.debug(f"Ultra-heavy processing: {total_votes} predictions, intensive stats computed")
                 
                 # Final decision based on ensemble
                 is_attack = attack_votes > (total_votes * 0.5)
@@ -445,11 +492,77 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
     if not detector.load_model():
         logger.error("Failed to load TST model, continuing with test predictions")
     
+    # Log current configuration at startup
+    logger.info(f"🔥 ACTIVE PROFILE: {PERFORMANCE_CONFIG.current_profile}")
+    processing_config = PERFORMANCE_CONFIG.get_processing_config()
+    logger.info(f"🔥 HEAVY FEATURES ENABLED: {processing_config.get('enable_heavy_features', False)}")
+    logger.info(f"🔥 AUGMENTATION COUNT: {processing_config.get('augmentation_count', 1)}")
+    logger.info(f"🔥 ENSEMBLE PASSES: {processing_config.get('ensemble_passes', 1)}")
+    
     prev_time = time.time()
     inference_times = []
     
+    # Ultra-aggressive CPU consumption thread for ultra profile
+    def ultra_cpu_burner():
+        """Dedicated thread for maximum CPU consumption"""
+        while PERFORMANCE_CONFIG.current_profile == 'ultra':
+            try:
+                # Massive CPU-intensive operations
+                for _ in range(500):  # 500 operations per cycle
+                    # Heavy matrix operations
+                    matrix_a = np.random.random((100, 100))
+                    matrix_b = np.random.random((100, 100))
+                    
+                    # Multiple expensive operations
+                    _ = np.linalg.inv(matrix_a + np.eye(100) * 0.01)  # Matrix inversion
+                    _ = np.dot(matrix_a, matrix_b)  # Matrix multiplication
+                    _ = np.fft.fft2(matrix_a)  # 2D FFT
+                    _ = np.linalg.svd(matrix_b)  # SVD decomposition
+                    _ = np.convolve(matrix_a.flatten(), matrix_b.flatten()[:50], mode='valid')
+                    
+                    # Additional CPU-intensive computations
+                    _ = np.power(matrix_a, 3)  # Element-wise power
+                    _ = np.exp(matrix_a * 0.1)  # Exponential
+                    _ = np.log(np.abs(matrix_a) + 1e-10)  # Logarithm
+                    
+                time.sleep(0.001)  # Tiny sleep to prevent complete system freeze
+            except Exception as e:
+                logger.debug(f"CPU burner thread error: {e}")
+                time.sleep(0.1)
+    
+    # Start ultra CPU burner for ultra profile
+    if PERFORMANCE_CONFIG.current_profile == 'ultra':
+        logger.info("🔥 STARTING ULTRA CPU BURNER THREAD")
+        from threading import Thread
+        cpu_burner_thread = Thread(target=ultra_cpu_burner, daemon=True)
+        cpu_burner_thread.start()
+    
     while True:
         try:
+            # Additional background processing based on profile
+            current_profile = PERFORMANCE_CONFIG.current_profile
+            
+            if current_profile == 'ultra':
+                # Ultra-heavy background processing for maximum CPU usage
+                for _ in range(200):  # 200 operations per loop iteration
+                    dummy_matrix = np.random.random((75, 75))
+                    _ = np.linalg.inv(dummy_matrix + np.eye(75) * 0.01)  # Matrix inversion
+                    _ = np.fft.fft2(dummy_matrix)  # 2D FFT
+                    _ = np.convolve(dummy_matrix.flatten(), np.ones(20), mode='valid')
+                    _ = np.power(dummy_matrix, 2.5)  # Power operations
+            elif current_profile == 'heavy':
+                # Heavy background processing
+                for _ in range(50):
+                    dummy_matrix = np.random.random((50, 50))
+                    _ = np.dot(dummy_matrix, dummy_matrix.T)
+                    _ = np.fft.fft(dummy_matrix.flatten())
+            elif current_profile == 'medium':
+                # Medium background processing
+                for _ in range(10):
+                    dummy_data = np.random.random(100)
+                    _ = np.convolve(dummy_data, np.ones(5), mode='valid')
+            # Light profile: no background processing
+            
             # Get feature vector from preprocessing
             data_point = detection_queue_out.get()
             current_time = time.time()
@@ -462,11 +575,54 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
             if not network_attack:
                 start_time = time.time()
                 
-                # Prepare sequence data for TST
-                tensor = detector.prepare_sequence_data(data_point)
-                
-                # Make prediction
-                is_attack, confidence = detector.predict(tensor)
+                # Force ultra-heavy processing regardless of config flags
+                if current_profile == 'ultra':
+                    # GUARANTEED ULTRA-HEAVY PROCESSING
+                    logger.debug("🔥 Executing ULTRA-HEAVY processing")
+                    
+                    # Prepare feature data with massive augmentation
+                    tensor = detector.prepare_sequence_data(data_point)
+                    features = tensor.squeeze().numpy()
+                    
+                    # Force ultra-heavy processing by overriding config
+                    original_config = detector.processing_config.copy()
+                    detector.processing_config.update({
+                        'enable_heavy_features': True,
+                        'augmentation_count': 8,  # Force 8x augmentation
+                        'ensemble_passes': 5,     # Force 5x ensemble
+                        'enable_statistics': True
+                    })
+                    
+                    # Ultra-intensive pre-processing
+                    for _ in range(25):  # 25 rounds of heavy preprocessing
+                        # Heavy mathematical transformations
+                        features = np.convolve(features.flatten(), np.random.random(10), mode='same').reshape(features.shape)
+                        features = np.fft.fft(features.flatten()).real.reshape(features.shape)
+                        features = np.tanh(features * np.random.random())
+                        features = features / (np.linalg.norm(features) + 1e-10)
+                    
+                    # Call heavy processing method
+                    is_attack, confidence = detector.detect_ddos(features)
+                    
+                    # Restore original config
+                    detector.processing_config = original_config
+                    
+                    # Additional ultra-heavy post-processing
+                    for _ in range(20):  # 20 rounds of post-processing
+                        dummy_result = np.random.random((100, 100))
+                        _ = np.linalg.eigvals(dummy_result)
+                        _ = np.fft.fft2(dummy_result)
+                        _ = np.convolve(dummy_result.flatten(), np.ones(20), mode='valid')
+                        
+                elif current_profile in ['heavy', 'medium']:
+                    # Use configured heavy processing
+                    tensor = detector.prepare_sequence_data(data_point)
+                    features = tensor.squeeze().numpy()
+                    is_attack, confidence = detector.detect_ddos(features)
+                else:
+                    # Light processing
+                    tensor = detector.prepare_sequence_data(data_point)
+                    is_attack, confidence = detector.predict(tensor)
                 
                 end_time = time.time()
                 inference_time_ms = (end_time - start_time) * 1000
@@ -479,25 +635,35 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
                         max_inference = np.max(inference_times)
                         min_inference = np.min(inference_times)
                         
-                        mode_str = "🔬 RESEARCH" if RESEARCH_MODE else "⚡ PRODUCTION"
-                        logger.info("=" * 50)
-                        logger.info(f"{mode_str} TST Performance Report")
-                        logger.info("=" * 50)
+                        profile_info = PERFORMANCE_CONFIG.get_current_profile_info()
+                        profile_name = profile_info.get('name', current_profile)
+                        cpu_target = profile_info.get('cpu_target', 'Unknown')
+                        
+                        logger.info("=" * 60)
+                        logger.info(f"🔥 {profile_name.upper()} Performance Report")
+                        logger.info("=" * 60)
+                        logger.info(f"Active Profile: {current_profile}")
+                        logger.info(f"CPU Target: {cpu_target}")
                         logger.info(f"Predictions: {len(inference_times)}")
                         logger.info(f"Avg inference: {avg_inference:.2f}ms")
                         logger.info(f"Min inference: {min_inference:.2f}ms")
                         logger.info(f"Max inference: {max_inference:.2f}ms")
                         
-                        if RESEARCH_MODE:
-                            logger.info("🔬 Heavy model - High accuracy, slower inference")
+                        if current_profile == 'ultra':
+                            logger.info("� ULTRA MODE: Maximum CPU consumption active")
+                        elif current_profile == 'heavy':
+                            logger.info("🔬 HEAVY MODE: Research-grade processing")
+                        elif current_profile == 'medium':
+                            logger.info("⚡ MEDIUM MODE: Balanced performance")
                         else:
-                            logger.info("⚡ Light model - Fast inference, good accuracy")
-                        logger.info("=" * 50)
+                            logger.info("💡 LIGHT MODE: Efficient processing")
+                        logger.info("=" * 60)
                         inference_times = []
                     prev_time = current_time
                 
-                # Log detection result
-                logger.debug(f"TST: {inference_time_ms:.2f}ms | {'ATTACK' if is_attack else 'NORMAL'} | Confidence: {confidence*100:.1f}%")
+                # Log detection result with profile info
+                profile_marker = "🔥" if current_profile == 'ultra' else "🔬" if current_profile == 'heavy' else "⚡" if current_profile == 'medium' else "💡"
+                logger.debug(f"TST {profile_marker}: {inference_time_ms:.2f}ms | {'ATTACK' if is_attack else 'NORMAL'} | Confidence: {confidence*100:.1f}%")
                 
                 # Send results to mitigation and storage
                 mitigation_queue_in.put(is_attack)
@@ -506,7 +672,8 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
                     'confidence': confidence,
                     'prediction_time': inference_time_ms,
                     'algorithm': 'tst',
-                    'sequence_length': LOOKBACK
+                    'sequence_length': LOOKBACK,
+                    'profile': current_profile
                 })
                 
             else:
