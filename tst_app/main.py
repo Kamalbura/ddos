@@ -381,16 +381,16 @@ class TST_Detector:
                     
                     # Ultra-heavy: Multiple passes with different processing
                     for pass_num in range(ensemble_passes):  # 3 passes per augmented sample
-                        # Add CPU-intensive preprocessing for each pass
+                        # Add CPU-intensive preprocessing for each pass (shape-preserving)
                         if PERFORMANCE_CONFIG.current_profile == 'ultra':
-                            # Heavy matrix operations
-                            processed_tensor = tensor.clone()
-                            for _ in range(10):  # 10 matrix operations per pass
-                                processed_tensor = torch.mm(processed_tensor.view(-1, 1), processed_tensor.view(1, -1)).view(tensor.shape)
-                                processed_tensor = torch.sigmoid(processed_tensor)
-                                processed_tensor = processed_tensor / processed_tensor.norm()
+                            processed_tensor = tensor.clone()  # [1, 1, seq_len]
+                            for _ in range(10):  # iterative, but keep [B,C,L]
+                                # Local smoothing + nonlinearity + normalization
+                                processed_tensor = torch.nn.functional.avg_pool1d(processed_tensor, kernel_size=5, stride=1, padding=2)
+                                processed_tensor = torch.sigmoid(processed_tensor * 2)
+                                processed_tensor = processed_tensor / (processed_tensor.norm(p=2) + 1e-8)
                             tensor = processed_tensor
-                        
+
                         pred, conf = self.predict(tensor)
                         predictions.append(pred)
                         confidences.append(conf)
@@ -537,8 +537,16 @@ def ddos_detection_tst(detection_queue_out, mitigation_queue_in, output_storage_
             data_point = detection_queue_out.get()
             current_time = time.time()
             
-            # Add to feature history for legitimate analysis
-            feature_history.append(data_point)
+            # Add scalar summary to feature history for legitimate analysis
+            # (Avoid 2D arrays that break numpy ops)
+            try:
+                feature_history.append(float(np.mean(data_point)))
+            except Exception:
+                # Fallback if data_point is already scalar
+                try:
+                    feature_history.append(float(data_point))
+                except Exception:
+                    pass
             if len(feature_history) > 50:  # Keep last 50 for analysis
                 feature_history = feature_history[-50:]
             
