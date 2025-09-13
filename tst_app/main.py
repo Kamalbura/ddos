@@ -51,51 +51,69 @@ class TST_Detector:
         
     def load_model(self) -> bool:
         """
-        Load TST model with proper error handling
+        Load TST model using the same approach as the working test script
         
         Returns:
             bool: True if successful, False otherwise
         """
+        # Import required modules
+        import sys
+        import os
+        
         try:
             if os.path.exists(self.model_path):
                 # Import all TST classes to make them available during loading
-                import sys
-                import os
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 sys.path.insert(0, current_dir)
                 
                 # Import the module to register all classes
                 import tstplus
                 
-                # Add all TST-related classes to the current module's namespace for pickle loading
+                logger.info("Loading TST model using working approach...")
+                
+                # Create a temporary module context for loading (same as test script)
+                import types
+                temp_module = types.ModuleType('temp_loader')
+                
+                # Add classes to temp module (exact same as working test)
+                import torch.nn as nn
                 for attr_name in dir(tstplus):
                     attr = getattr(tstplus, attr_name)
-                    if isinstance(attr, type) and issubclass(attr, nn.Module):
-                        sys.modules[__name__].__dict__[attr_name] = attr
+                    if isinstance(attr, type) and hasattr(attr, '__module__'):
+                        setattr(temp_module, attr_name, attr)
                 
-                # Also add specific classes that might be referenced
-                sys.modules[__name__]._TSTBackbone = tstplus._TSTBackbone
-                sys.modules[__name__]._TSTEncoder = tstplus._TSTEncoder
-                sys.modules[__name__]._TSTEncoderLayer = tstplus._TSTEncoderLayer
-                sys.modules[__name__].TSTPlus = tstplus.TSTPlus
+                # Specifically add the main classes (same as test script)
+                temp_module._TSTBackbone = tstplus._TSTBackbone
+                temp_module._TSTEncoder = tstplus._TSTEncoder
+                temp_module._TSTEncoderLayer = tstplus._TSTEncoderLayer
+                temp_module.TSTPlus = tstplus.TSTPlus
                 
-                logger.info("Loading TST model with proper class references...")
+                # Register temp module in sys.modules temporarily
+                old_main = sys.modules.get('__main__')
+                sys.modules['__main__'] = temp_module
                 
-                # Load the model with proper class references
-                checkpoint = torch.load(self.model_path, map_location='cpu', weights_only=False)
+                try:
+                    # Load model (same as working test)
+                    checkpoint = torch.load(self.model_path, map_location='cpu', weights_only=False)
+                finally:
+                    # Restore original __main__
+                    if old_main is not None:
+                        sys.modules['__main__'] = old_main
                 
-                # The model should be the entire model object
+                # Handle different checkpoint formats
                 if hasattr(checkpoint, 'eval'):
                     # It's the model directly
                     self.model = checkpoint
+                    logger.info("Loaded complete PyTorch model")
                 elif isinstance(checkpoint, dict):
                     # Handle different checkpoint formats
                     if 'model' in checkpoint:
                         # Checkpoint contains model under 'model' key
                         self.model = checkpoint['model']
+                        logger.info("Loaded model from 'model' key in checkpoint")
                     elif 'state_dict' in checkpoint:
                         # Create model and load state dict
-                        self.model = TSTPlus(
+                        self.model = tstplus.TSTPlus(
                             c_in=1,  # Single feature (packet count)
                             c_out=2,  # Binary classification (Normal/Attack)
                             seq_len=LOOKBACK,
@@ -105,9 +123,10 @@ class TST_Detector:
                             dropout=0.1
                         )
                         self.model.load_state_dict(checkpoint['state_dict'])
+                        logger.info("Loaded model state dict")
                     else:
                         # Assume it's a state dict directly
-                        self.model = TSTPlus(
+                        self.model = tstplus.TSTPlus(
                             c_in=1,  # Single feature (packet count)
                             c_out=2,  # Binary classification (Normal/Attack)
                             seq_len=LOOKBACK,
@@ -117,9 +136,11 @@ class TST_Detector:
                             dropout=0.1
                         )
                         self.model.load_state_dict(checkpoint)
+                        logger.info("Loaded model from direct state dict")
                 else:
                     # Unknown format, try to use as model directly
                     self.model = checkpoint
+                    logger.info("Using checkpoint directly as model")
                 
                 self.model.eval()  # Set to evaluation mode
                 logger.info(f"TST model loaded successfully from {self.model_path}")
