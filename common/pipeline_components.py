@@ -40,7 +40,7 @@ FAST_MITIGATE = False
 def check_venv():
     """
     Modified to check for a specific venv path
-    Note: This will be overridden to check for /home/pi/nenv on Raspberry Pi
+    Note: This will be overridden to check for /home/dev/nenv on Raspberry Pi
     """
     # On Windows during development, we'll be more lenient
     if os.name == 'nt':  # Windows
@@ -48,7 +48,7 @@ def check_venv():
         return True
     
     # On Linux/Pi, check for specific nenv path
-    nenv_path = "/home/pi/nenv"
+    nenv_path = "/home/dev/nenv"
     in_venv = sys.prefix == nenv_path
     
     if not in_venv:

@@ -7,14 +7,15 @@ echo "🚀 Starting XGBoost DDoS Defender"
 echo "=================================="
 
 # Check if running on Windows (Git Bash/MSYS2)
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+# Use POSIX-compatible syntax instead of bash [[ ]]
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     echo "Windows environment detected"
     VENV_PATH="/c/Users/burak/Desktop/nenv"
     PYTHON_CMD="python"
 else
     # Linux/Pi environment
     echo "Linux environment detected"
-    VENV_PATH="/home/pi/nenv"
+    VENV_PATH="/home/dev/nenv"
     PYTHON_CMD="python3"
 fi
 
@@ -28,12 +29,13 @@ fi
 echo "📦 Activating virtual environment from $VENV_PATH"
 
 # Activate virtual environment
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+# Use POSIX-compatible syntax
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     # Windows activation
-    source "$VENV_PATH/Scripts/activate"
+    . "$VENV_PATH/Scripts/activate"
 else
     # Linux activation
-    source "$VENV_PATH/bin/activate"
+    . "$VENV_PATH/bin/activate"
 fi
 
 # Verify activation
@@ -74,7 +76,7 @@ echo "Press Ctrl+C to stop the application"
 echo ""
 
 # Start the application
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     # Windows - run directly
     $PYTHON_CMD xgboost_app/main.py
 else

@@ -58,32 +58,62 @@ class TST_Detector:
         """
         try:
             if os.path.exists(self.model_path):
-                # Load the model
-                checkpoint = torch.load(self.model_path, map_location='cpu')
+                # Import all TST classes to make them available during loading
+                import sys
+                import os
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, current_dir)
+                
+                # Import the module to register all classes
+                import tstplus
+                from tstplus import TSTPlus, _TSTBackbone, _TSTEncoderLayer
+                
+                # Add classes to the current module's namespace for pickle loading
+                sys.modules[__name__]._TSTBackbone = _TSTBackbone
+                sys.modules[__name__]._TSTEncoderLayer = _TSTEncoderLayer
+                sys.modules[__name__].TSTPlus = TSTPlus
+                
+                logger.info("Loading TST model with proper class references...")
+                
+                # Load the model with proper class references
+                checkpoint = torch.load(self.model_path, map_location='cpu', weights_only=False)
                 
                 # The model should be the entire model object
                 if hasattr(checkpoint, 'eval'):
                     # It's the model directly
                     self.model = checkpoint
+                elif isinstance(checkpoint, dict):
+                    # Handle different checkpoint formats
+                    if 'model' in checkpoint:
+                        # Checkpoint contains model under 'model' key
+                        self.model = checkpoint['model']
+                    elif 'state_dict' in checkpoint:
+                        # Create model and load state dict
+                        self.model = TSTPlus(
+                            c_in=1,  # Single feature (packet count)
+                            c_out=2,  # Binary classification (Normal/Attack)
+                            seq_len=LOOKBACK,
+                            d_model=64,  # Smaller for efficiency
+                            n_heads=8,
+                            n_layers=2,  # Reduced layers for speed
+                            dropout=0.1
+                        )
+                        self.model.load_state_dict(checkpoint['state_dict'])
+                    else:
+                        # Assume it's a state dict directly
+                        self.model = TSTPlus(
+                            c_in=1,  # Single feature (packet count)
+                            c_out=2,  # Binary classification (Normal/Attack)
+                            seq_len=LOOKBACK,
+                            d_model=64,  # Smaller for efficiency
+                            n_heads=8,
+                            n_layers=2,  # Reduced layers for speed
+                            dropout=0.1
+                        )
+                        self.model.load_state_dict(checkpoint)
                 else:
-                    # It might be a state dict, try to create model
-                    # For now, create a default TST model
-                    self.model = TSTPlus(
-                        c_in=1,  # Single feature (packet count)
-                        c_out=2,  # Binary classification (Normal/Attack)
-                        seq_len=LOOKBACK,
-                        d_model=64,  # Smaller for efficiency
-                        n_heads=8,
-                        n_layers=2,  # Reduced layers for speed
-                        dropout=0.1
-                    )
-                    
-                    # Try to load state dict if available
-                    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
-                        try:
-                            self.model.load_state_dict(checkpoint['state_dict'])
-                        except:
-                            logger.warning("Could not load state dict, using randomly initialized model")
+                    # Unknown format, try to use as model directly
+                    self.model = checkpoint
                 
                 self.model.eval()  # Set to evaluation mode
                 logger.info(f"TST model loaded successfully from {self.model_path}")

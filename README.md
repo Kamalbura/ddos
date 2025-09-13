@@ -28,7 +28,7 @@ The system is built with a strict modular architecture where two separate applic
 ```
 
 **External Dependencies:**
-- Virtual Environment: `/home/pi/nenv` (Linux/Pi) or `/c/Users/burak/Desktop/nenv` (Windows)
+- Virtual Environment: `/home/dev/nenv` (Linux/Pi) or `/c/Users/burak/Desktop/nenv` (Windows)
 
 ## 🎯 Detection Modes
 
@@ -64,8 +64,8 @@ sudo apt install python3-venv python3-pip libpcap-dev macchanger conntrack -y
 
 1. **Create Virtual Environment:**
    ```bash
-   python3 -m venv /home/pi/nenv
-   source /home/pi/nenv/bin/activate
+   python3 -m venv /home/dev/nenv
+   source /home/dev/nenv/bin/activate
    ```
 
 2. **Install Python Dependencies:**
@@ -121,12 +121,21 @@ curl "http://localhost:8000/update-parameters?flag=1"
 
 ## 🔧 Advanced Configuration
 
-### TST Model Optimization
+### TST Model Precision Options
+
+**Default Configuration (Recommended):**
+- Uses FP32 (Full Precision) model for maximum accuracy
+- Better detection of sophisticated attack patterns
+- Higher computational requirements but superior precision
+
+**Optional Quantization (Performance-focused):**
 The TST model can be quantized from FP32 to INT8 for 2-4x performance improvement:
 
 ```bash
 python scripts/quantize_tst.py
 ```
+
+Note: The application is configured by default to use the FP32 model for optimal accuracy.
 
 This creates `models/tst_model_int8.pth` with:
 - ~75% size reduction
@@ -195,9 +204,9 @@ sudo -E python3 xgboost_app/main.py
 **2. Virtual Environment Not Found**
 ```bash
 # Verify path
-ls -la /home/pi/nenv
+ls -la /home/dev/nenv
 # Or recreate
-python3 -m venv /home/pi/nenv
+python3 -m venv /home/dev/nenv
 ```
 
 **3. PyTorch Not Found (TST)**

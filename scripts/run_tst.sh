@@ -7,14 +7,15 @@ echo "🚀 Starting TST (Time Series Transformer) DDoS Defender"
 echo "========================================================"
 
 # Check if running on Windows (Git Bash/MSYS2)
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+# Use POSIX-compatible syntax instead of bash [[ ]]
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     echo "Windows environment detected"
     VENV_PATH="/c/Users/burak/Desktop/nenv"
     PYTHON_CMD="python"
 else
     # Linux/Pi environment
     echo "Linux environment detected"
-    VENV_PATH="/home/pi/nenv"
+    VENV_PATH="/home/dev/nenv"
     PYTHON_CMD="python3"
 fi
 
@@ -28,12 +29,13 @@ fi
 echo "📦 Activating virtual environment from $VENV_PATH"
 
 # Activate virtual environment
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+# Use POSIX-compatible syntax
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     # Windows activation
-    source "$VENV_PATH/Scripts/activate"
+    . "$VENV_PATH/Scripts/activate"
 else
     # Linux activation
-    source "$VENV_PATH/bin/activate"
+    . "$VENV_PATH/bin/activate"
 fi
 
 # Verify activation
@@ -53,12 +55,12 @@ echo "📁 Working directory: $(pwd)"
 
 # Check if TST model exists
 MODEL_FOUND=false
-if [ -f "models/tst_model_int8.pth" ]; then
-    echo "✅ Found optimized TST model (INT8)"
+if [ -f "models/tst_model_fp32.pth" ]; then
+    echo "✅ Found FP32 TST model (Full Precision)"
     MODEL_FOUND=true
-elif [ -f "models/tst_model_fp32.pth" ]; then
-    echo "⚠️  Found FP32 TST model. Consider running quantization for better performance:"
-    echo "   python scripts/quantize_tst.py"
+elif [ -f "models/tst_model_int8.pth" ]; then
+    echo "✅ Found INT8 TST model (Quantized)"
+    echo "ℹ️  Note: The application is configured to use FP32 model for better accuracy"
     MODEL_FOUND=true
 else
     echo "⚠️  Warning: TST model not found. The application will run in test mode"
@@ -71,12 +73,12 @@ if [ $? -ne 0 ]; then
     echo "❌ Error: Missing dependencies. Installing..."
     
     # Install PyTorch for the appropriate platform
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
         # Windows - install CPU version of PyTorch
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
     else
         # Linux/Pi - install appropriate version
-        if [[ $(uname -m) == "aarch64" ]]; then
+        if [ "$(uname -m)" = "aarch64" ]; then
             # ARM64/Pi - install from wheel
             echo "ARM64 detected - installing PyTorch for ARM64"
             pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -100,18 +102,18 @@ else
 fi
 
 echo "🎯 Starting TST Application..."
-echo "   - Model: Time Series Transformer (High Accuracy)"
+echo "   - Model: Time Series Transformer (Full Precision FP32)"
 echo "   - Sequence length: 400 time windows"
 echo "   - Config server: http://localhost:8001"
 echo ""
-echo "⚡ Note: TST model provides higher accuracy but requires more computational resources"
-echo "💡 For best performance on Raspberry Pi, ensure the INT8 quantized model is available"
+echo "⚡ Note: Using FP32 model for maximum accuracy"
+echo "💡 Higher computational requirements but better detection precision"
 echo ""
 echo "Press Ctrl+C to stop the application"
 echo ""
 
 # Start the application
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+if [ "$OSTYPE" = "msys" ] || [ "$OSTYPE" = "cygwin" ] || [ "$(uname -o 2>/dev/null)" = "Msys" ]; then
     # Windows - run directly
     $PYTHON_CMD tst_app/main.py
 else
