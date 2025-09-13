@@ -167,29 +167,22 @@ def ddos_preprocess(capture_queue_out, detection_queue_in, input_storage_queue_i
         lookback: Number of time windows to include in feature vector
         window_size: Duration of each time window in seconds
     """
+    # Allow runtime overrides via environment to help testing and CPU tuning
+    try:
+        lb_override = os.environ.get('LOOKBACK_OVERRIDE')
+        ws_override = os.environ.get('WINDOW_SIZE_OVERRIDE')
+        if lb_override is not None:
+            lookback = max(1, int(lb_override))
+        if ws_override is not None:
+            window_size = max(0.001, float(ws_override))
+    except Exception:
+        pass
+
     logger.info(f"Starting preprocessing with lookback={lookback}, window_size={window_size}")
     
     # Use a blocking, low-CPU approach per time window
-    # Fill initial window history
+    # Bootstrap instantly with zeros so detection starts immediately (no long warmup)
     window_counts = [0] * lookback
-    for i in range(lookback):
-        end_time = time.time() + window_size
-        count = 0
-        while True:
-            remaining = end_time - time.time()
-            if remaining <= 0:
-                break
-            try:
-                # Block until packet arrives or window ends
-                capture_queue_out.get(timeout=min(remaining, 0.1))
-                count += 1
-            except Exception:
-                # Timeout: just loop to re-check remaining time
-                pass
-        window_counts[i] = count
-        logger.debug(f"Initial window {i}: {count} packets")
-
-    # Emit initial features
     detection_queue_in.put(window_counts.copy())
     input_storage_queue_in.put({
         'timestamp': time.time(),
